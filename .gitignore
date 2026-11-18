@@ -1,0 +1,8 @@
+# Local demo keys. Never commit real private keys.
+keys/*.pem
+keys/*.key
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+poc/web_uploads/

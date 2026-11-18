@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Signature Demo</title>
+<style>
+  :root {
+    --ink: #1f2937;
+    --muted: #4b5563;
+    --line: #d7dde5;
+    --accent: #0f766e;
+    --accent-dark: #115e59;
+    --warn-bg: #fef3c7;
+    --warn-border: #b45309;
+    --ok-bg: #ecfdf5;
+    --ok-border: #047857;
+    --bad-bg: #fef2f2;
+    --bad-border: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    background: #fff;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .warning {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+  }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab {
+    flex: 1;
+    padding: 10px 8px;
+    border: 1px solid var(--line);
+    background: #f3f4f6;
+    border-radius: 8px 8px 0 0;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .tab[aria-selected="true"] {
+    background: #fff;
+    border-bottom-color: #fff;
+    font-weight: 600;
+    box-shadow: inset 0 3px 0 var(--accent);
+  }
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 0 8px 8px 8px;
+    padding: 20px;
+    display: none;
+  }
+  .panel.active { display: block; }
+  .panel h2 { font-size: 1.15rem; margin: 0 0 6px; }
+  .hint { color: var(--muted); font-size: 0.9rem; margin: 0 0 14px; }
+  label { display: block; font-weight: 600; font-size: 0.9rem; margin: 12px 0 4px; }
+  input[type="text"], input[type="password"], input[type="file"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 0.95rem;
+  }
+  .row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button.primary:hover { background: var(--accent-dark); }
+  button.secondary {
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  ol.steps {
+    margin: 16px 0 0;
+    padding-left: 22px;
+    font-size: 0.93rem;
+    color: var(--muted);
+  }
+  .result {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    font-size: 0.95rem;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result.ok { background: var(--ok-bg); border-color: var(--ok-border); }
+  .result.bad { background: var(--bad-bg); border-color: var(--bad-border); }
+  .result .verdict { font-weight: 700; font-size: 1.1rem; }
+  .result.ok .verdict { color: var(--ok-border); }
+  .result.bad .verdict { color: var(--bad-border); }
+  .downloads { margin-top: 10px; font-size: 0.93rem; }
+  .meta { font-size: 0.85rem; color: var(--muted); margin-top: 8px; word-break: break-all; }
+  #pad {
+    width: 100%;
+    height: 200px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    cursor: crosshair;
+    touch-action: none;
+    display: block;
+  }
+  .foot { margin-top: 24px; font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Digital Signature Demo</h1>
+  <p class="sub">Sign a file, verify it, then tamper with it and watch verification fail. Algorithm: {{ algorithm }}.</p>
+
+  <div class="warning" role="alert">
+    <strong>Demo only.</strong> Keys generated here are for demonstration and
+    must never be used for real documents or production systems.
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="keys">1. Generate Keys</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="sign">2. Sign</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="verify">3. Verify</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="pdf">4. Sign PDF</button>
+  </div>
+
+  <!-- TAB 1 -->
+  <section class="panel active" id="panel-keys" role="tabpanel">
+    <h2>Step 1: Create a key pair</h2>
+    <p class="hint">Makes a private key (stays secret, password-locked) and a public key (safe to share).</p>
+    <form id="form-keys">
+      <label for="key-password">Password for the private key</label>
+      <input type="password" id="key-password" name="password" required autocomplete="new-password">
+      <div class="row"><button class="primary" type="submit">Generate keys</button></div>
+    </form>
+    <ol class="steps" id="steps-keys"></ol>
+    <div class="result" id="result-keys"></div>
+  </section>
+
+  <!-- TAB 2 -->
+  <section class="panel" id="panel-sign" role="tabpanel">
+    <h2>Step 2: Sign a document</h2>
+    <p class="hint">Pick any file. The demo fingerprints it, signs the fingerprint, and gives you a .sig file plus details.</p>
+    <form id="form-sign">
+      <label for="sign-file">Document to sign</label>
+      <input type="file" id="sign-file" name="file" required>
+      <label for="signer">Signer name</label>
+      <input type="text" id="signer" name="signer" value="Alice">
+      <label for="sign-password">Private key password (from Step 1)</label>
+      <input type="password" id="sign-password" name="password" required autocomplete="current-password">
+      <div class="row"><button class="primary" type="submit">Sign document</button></div>
+    </form>
+    <ol class="steps" id="steps-sign"></ol>
+    <div class="result" id="result-sign"></div>
+  </section>
+
+  <!-- TAB 3 -->
+  <section class="panel" id="panel-verify" role="tabpanel">
+    <h2>Step 3: Verify (or tamper)</h2>
+    <p class="hint">Upload the document, its .sig file, and optionally the metadata file. Leave the public key empty to use the demo key.</p>
+    <form id="form-verify">
+      <label for="verify-file">Document</label>
+      <input type="file" id="verify-file" name="file" required>
+      <label for="verify-sig">Signature (.sig)</label>
+      <input type="file" id="verify-sig" name="sig" required>
+      <label for="verify-meta">Metadata (.meta.json, optional)</label>
+      <input type="file" id="verify-meta" name="meta">
+      <label for="verify-pubkey">Public key (optional, defaults to demo key)</label>
+      <input type="file" id="verify-pubkey" name="pubkey">
+      <div class="row">
+        <button class="primary" type="submit">Verify now</button>
+        <button class="secondary" type="button" id="btn-tamper">Tamper demo: change 1 byte and verify</button>
+      </div>
+    </form>
+    <form id="form-verify-pdf">
+      <label for="verify-signed-pdf">Or verify a signed PDF (from tab 4)</label>
+      <input type="file" id="verify-signed-pdf" name="signedpdf" accept="application/pdf">
+      <div class="row"><button class="primary" type="submit">Verify PDF</button></div>
+    </form>
+    <ol class="steps" id="steps-verify"></ol>
+    <div class="result" id="result-verify"></div>
+  </section>
+
+  <!-- TAB 4 -->
+  <section class="panel" id="panel-pdf" role="tabpanel">
+    <h2>Step 4: Sign a PDF like paper</h2>
+    <p class="hint">Draw your signature below with mouse or finger. Your drawing appears on the PDF, and a real cryptographic signature protects the whole file. Leave the PDF empty to use the sample contract. After signing, verify the file on tab 3 like a receiver would.</p>
+    <form id="form-pdf">
+      <label for="pdf-file">PDF to sign (optional)</label>
+      <input type="file" id="pdf-file" name="pdffile" accept="application/pdf">
+      <label>Your signature (draw here)</label>
+      <canvas id="pad" width="640" height="200"></canvas>
+      <div class="row"><button class="secondary" type="button" id="btn-clear">Clear drawing</button></div>
+      <label for="pdf-signer">Signer name</label>
+      <input type="text" id="pdf-signer" name="signer" value="Alice">
+      <label for="pdf-password">Private key password (from Step 1)</label>
+      <input type="password" id="pdf-password" name="password" required autocomplete="current-password">
+      <div class="row"><button class="primary" type="submit">Sign PDF</button></div>
+    </form>
+    <ol class="steps" id="steps-pdf"></ol>
+    <div class="result" id="result-pdf"></div>
+  </section>
+
+  <p class="foot">Private keys never leave this demo server. Uploaded files are stored only for the demo session.</p>
+</div>
+
+<script>
+  // Tabs: show one panel at a time.
+  document.querySelectorAll(".tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (b) { b.setAttribute("aria-selected", "false"); });
+      btn.setAttribute("aria-selected", "true");
+      document.querySelectorAll(".panel").forEach(function (p) { p.classList.remove("active"); });
+      document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  function renderSteps(id, steps) {
+    var list = document.getElementById(id);
+    list.innerHTML = "";
+    (steps || []).forEach(function (s) {
+      var li = document.createElement("li");
+      li.textContent = s;
+      list.appendChild(li);
+    });
+  }
+
+  function renderResult(id, data, extra) {
+    var box = document.getElementById(id);
+    box.className = "result show " + (data.ok && data.valid !== false ? "ok" : "bad");
+    box.innerHTML = "";
+    if (data.valid === true || data.valid === false) {
+      var verdict = document.createElement("div");
+      verdict.className = "verdict";
+      verdict.textContent = data.valid ? "VALID" : "INVALID";
+      box.appendChild(verdict);
+    }
+    var msg = document.createElement("div");
+    msg.textContent = data.reason || data.error || "Done.";
+    box.appendChild(msg);
+    if (extra) { box.appendChild(extra); }
+  }
+
+  async function postForm(url, form) {
+    var res = await fetch(url, { method: "POST", body: new FormData(form) });
+    var data = await res.json().catch(function () { return { ok: false, error: "Server error." }; });
+    return data;
+  }
+
+  document.getElementById("form-keys").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var data = await postForm("/api/keygen", e.target);
+    renderSteps("steps-keys", data.steps);
+    renderResult("result-keys", data.ok ? { ok: true, reason: "Keys ready. Go to tab 2." } : data);
+  });
+
+  document.getElementById("form-sign").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var data = await postForm("/api/sign", e.target);
+    renderSteps("steps-sign", data.steps);
+    var extra = null;
+    if (data.ok) {
+      extra = document.createElement("div");
+      var dl = document.createElement("div");
+      dl.className = "downloads";
+      dl.innerHTML = "Download: <a href='/download/" + data.sig_download + "'>" + data.sig_download + "</a> | " +
+        "<a href='/download/" + data.meta_download + "'>" + data.meta_download + "</a>";
+      var meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = "signer=" + data.metadata.signer + " time=" + data.metadata.timestamp +
+        " fingerprint=" + data.metadata.file_hash.slice(0, 32) + "... signature=" + data.signature_preview;
+      extra.appendChild(dl);
+      extra.appendChild(meta);
+    }
+    renderResult("result-sign", data.ok ? { ok: true, reason: "Signed. Save both download files for tab 3." } : data, extra);
+  });
+
+  document.getElementById("form-verify").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var data = await postForm("/api/verify", e.target);
+    renderSteps("steps-verify", data.steps);
+    renderResult("result-verify", data);
+  });
+
+  document.getElementById("form-verify-pdf").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    if (!e.target.querySelector("#verify-signed-pdf").files.length) {
+      renderResult("result-verify", { ok: false, error: "Choose the signed PDF first." });
+      return;
+    }
+    var data = await postForm("/api/verify-pdf", e.target);
+    renderSteps("steps-verify", data.steps);
+    renderResult("result-verify", data);
+  });
+
+  // Draw pad: pointer events cover mouse, pen, and touch in one handler.
+  var pad = document.getElementById("pad");
+  var ctx = pad.getContext("2d");
+  var drawing = false;
+  var hasInk = false;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, pad.width, pad.height);
+  ctx.strokeStyle = "#1e3a8a";
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  function padPos(e) {
+    var r = pad.getBoundingClientRect();
+    return [(e.clientX - r.left) * (pad.width / r.width), (e.clientY - r.top) * (pad.height / r.height)];
+  }
+  pad.addEventListener("pointerdown", function (e) {
+    drawing = true;
+    pad.setPointerCapture(e.pointerId);
+    var p = padPos(e);
+    ctx.beginPath();
+    ctx.moveTo(p[0], p[1]);
+  });
+  pad.addEventListener("pointermove", function (e) {
+    if (!drawing) return;
+    var p = padPos(e);
+    ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+    hasInk = true;
+  });
+  pad.addEventListener("pointerup", function () { drawing = false; });
+  pad.addEventListener("pointercancel", function () { drawing = false; });
+  document.getElementById("btn-clear").addEventListener("click", function () {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, pad.width, pad.height);
+    ctx.beginPath();
+    hasInk = false;
+  });
+
+  document.getElementById("form-pdf").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!hasInk) {
+      renderSteps("steps-pdf", []);
+      renderResult("result-pdf", { ok: false, error: "Draw your signature on the pad first." });
+      return;
+    }
+    var form = e.target;
+    pad.toBlob(function (blob) {
+      var data = new FormData(form);
+      data.append("ink", blob, "signature.png");
+      fetch("/api/sign-pdf", { method: "POST", body: data })
+        .then(function (res) { return res.json(); })
+        .then(function (d) {
+          renderSteps("steps-pdf", d.steps);
+          var extra = null;
+          if (d.ok && d.pdf_download) {
+            extra = document.createElement("div");
+            extra.className = "downloads";
+            extra.innerHTML = "Download: <a href='/download/" + d.pdf_download + "'>" + d.pdf_download + "</a>";
+          }
+          renderResult("result-pdf", d, extra);
+        })
+        .catch(function () {
+          renderResult("result-pdf", { ok: false, error: "Server error. Is the demo running?" });
+        });
+    }, "image/png");
+  });
+
+  document.getElementById("btn-tamper").addEventListener("click", async function () {
+    var form = document.getElementById("form-verify");
+    if (!form.querySelector("#verify-file").files.length || !form.querySelector("#verify-sig").files.length) {
+      renderResult("result-verify", { ok: false, error: "Choose the document and .sig first, then press this button." });
+      return;
+    }
+    var data = await postForm("/api/tamper", form);
+    renderSteps("steps-verify", data.steps);
+    renderResult("result-verify", data);
+  });
+</script>
+</body>
+</html>
